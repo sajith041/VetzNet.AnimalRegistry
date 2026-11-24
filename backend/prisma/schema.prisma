@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Species {
+  id      Int      @id @default(autoincrement())
+  name    String   @unique
+  nameSi  String?
+  nameTa  String?
+  active  Boolean  @default(true)
+  animals Animal[]
+}
+
+model Owner {
+  id            Int      @id @default(autoincrement())
+  fullName      String
+  nic           String?  @unique
+  phone         String?
+  email         String?
+  address       String?
+  preferredLang String   @default("en")
+  ownerType          String   @default("PERSON")   // "PERSON" | "ORGANIZATION"
+  registrationNumber String?                        // for orgs (e.g., NGO reg no.)
+  contactPerson      String?                        // for orgs — the individual in charge
+  district           String?
+
+  verificationStatus String   @default("VERIFIED")   // VERIFIED | PENDING
+  authorityCode      String?                          // e.g. "CMC", "KMC" for local authorities
+  
+  createdAt     DateTime @default(now())
+
+  animalsCurrent Animal[]           @relation("CurrentOwner")
+  animalsFrom    OwnershipHistory[] @relation("FromOwner")
+  animalsTo      OwnershipHistory[] @relation("ToOwner")
+}
+
+model Animal {
+  id             Int       @id @default(autoincrement())
+  clientUuid     String    @unique
+  name           String?
+  speciesId      Int
+  breed          String?
+  dob            DateTime?
+  sex            String?
+  color          String?
+  photoUrl       String?
+  currentOwnerId Int
+  status         String    @default("ACTIVE")
+  chipRequirement  String    @default("REQUIRED")
+
+
+  species          Species            @relation(fields: [speciesId], references: [id])
+  currentOwner     Owner              @relation("CurrentOwner", fields: [currentOwnerId], references: [id])
+  microchip        Microchip?
+  vaccinations     Vaccination[]
+  ownershipHistory OwnershipHistory[]
+
+  location      String?
+  sterilizationStatus String?
+
+  createdBy User? @relation("createdBy",fields: [createdById], references: [id])
+  createdById Int?
+  modifiedBy User? @relation("modifiedBy",fields: [modifiedById], references: [id])
+  modifiedById Int?
+
+  createdAt        DateTime?  @default(now())
+  modifiedAt         DateTime?  @default(now())
+  syncedAt       DateTime?  @default(now())
+
+  latitude      Float?
+  longitude     Float?
+}
+
+model Microchip {
+  id               Int       @id @default(autoincrement())
+  chipNumber       String    @unique
+  isoStandard      String    @default("ISO_11784")
+  implantDate      DateTime?
+  implantLocation  String?
+  implantedByVetId Int?
+  animalId         Int       @unique
+  status           String    @default("ACTIVE")
+  createdAt        DateTime  @default(now())
+  syncedAt         DateTime  @default(now())
+
+  animal Animal @relation(fields: [animalId], references: [id])
+}
+
+model Vaccination {
+  id               Int       @id @default(autoincrement())
+  clientUuid       String    @unique
+  animalId         Int
+  vaccineType      String    @default("RABIES")
+  batchNo          String?
+  manufacturer     String?
+  expiryDate       DateTime?                          // ← NEW: from sticker QR later
+  stickerQr        String?                            // ← NEW: scanned sticker ID
+  administeredDate DateTime
+  nextDueDate      DateTime?
+  vetId            Int?
+  certificateUrl   String?
+  createdAt        DateTime  @default(now())
+  syncedAt         DateTime  @default(now())
+
+  animal Animal @relation(fields: [animalId], references: [id])
+}
+
+model OwnershipHistory {
+  id               Int      @id @default(autoincrement())
+  animalId         Int
+  fromOwnerId      Int
+  toOwnerId        Int
+  transferDate     DateTime @default(now())
+  transferReason   String?
+  approvedByUserId Int?
+
+  // Phase 2 readiness
+  method           String   @default("DIRECT")   // "DIRECT" | "CODE"
+  transferCode     String?                        // the code used, if any
+
+  createdAt        DateTime @default(now())
+
+  animal    Animal @relation(fields: [animalId], references: [id])
+  fromOwner Owner  @relation("FromOwner", fields: [fromOwnerId], references: [id])
+  toOwner   Owner  @relation("ToOwner", fields: [toOwnerId], references: [id])
+}
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique
+  passwordHash  String
+  fullName      String?                             // display name
+  email         String?                             // contact
+  role          String    @default("VET")           // VET | CLINIC_STAFF | DAPH_OFFICER | SUPER_ADMIN
+  status        String    @default("ACTIVE")        // ACTIVE | INACTIVE
+  preferredLang String    @default("en")            // en | si | ta
+
+  vetId         Int?                                // link to a Vet profile (optional)
+  vet           Vet?      @relation(fields: [vetId], references: [id])
+
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt @default(now())
+
+  animalsCreated  Animal[] @relation("createdBy")
+  animalsModified Animal[] @relation("modifiedBy")
+}
+model Vet {
+  id              Int      @id @default(autoincrement())
+  fullName        String
+  slvcRegNo       String   @unique               // SLVC Registration Number
+  employmentType  String   @default("PRIVATE")   // GOV | NGO | PRIVATE | ACADEMIC | MOBILE
+  workplace       String?                        // Gov office / NGO name / clinic name
+  district        String?
+  phone           String?
+  email           String?
+  status          String   @default("ACTIVE")    // ACTIVE | SUSPENDED
+  notes           String?                        // context notes
+  createdAt       DateTime @default(now())
+  users           User[]
+}
